@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 
 import os
+import getpass
 import argparse
 from netmiko import ConnectHandler
+
+UNSET = False
 
 def read_file(fn):
    with open(fn) as f:
       result = f.read()
    return result.rstrip()
 
-def cisco_ios(net_device, username, public_key, unset):
-    ssh_conn = ConnectHandler(**net_device)
+def cisco_ios(username, public_key):
     public_key = [public_key[i:i+253] for i in range(0, len(public_key), 253)]
     commands_to_set = ['username {} privilege 15'.format(username),
                        'ip ssh pubkey-chain',
@@ -20,46 +22,77 @@ def cisco_ios(net_device, username, public_key, unset):
                          '\n'
                          'ip ssh pubkey-chain',
                          'no username {}'.format(username)]
-    if not unset:
-        ssh_conn.send_config_set(commands_to_set)
+    if not UNSET:
+        return commands_to_set
     else:
-        ssh_conn.send_config_set(commands_to_unset)
-    return 0
+        return commands_to_unset
 
-def arista():
-    pass
+def arista(username, public_key, admin_secret):
+    commands_to_set = ['username {} privilege 15 secret {}'.format(username, admin_secret),
+                       'username {} sshkey {}'.format(username, public_key)]
+    commands_to_unset = ['no username {}'.format(username)]
+    if not UNSET:
+        return commands_to_set
+    else:
+        return commands_to_unset
 
-def junos():
-    pass
+def junos(username, public_key):
+    commands_to_set = ['edit system login',
+                       'set user {} class super-user'.format(username),
+                       'set user {} authentication ssh-rsa "{}"'.format(username,
+                                                                      public_key),
+                        'exit']
+    commands_to_unset = ['edit system login',
+                         'delete user {}'.format(username),
+                         'exit']
+    if not UNSET:
+        return commands_to_set
+    else:
+        return commands_to_unset
 
-def dell_os9():
+def dell_os9(username, public_key):
     pass
 
 def comware():
     pass
 
+def save_config(ssh_conn, vendor):
+    save = None
+    if vendor == 'cisco':
+        def save():
+            ssh_conn.send_command_expect('write memory')
+    elif vendor == 'juniper':
+        def save():
+            ssh_conn.commit()
+    return save
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("ip", help="Device hostname or IP address")
     parser.add_argument("vendor", help="Device vendor(same as in netmiko)",
-                         choices=['cisco_ios', 'arista_eos', 'juniper'])
-    parser.add_argument("user", help="User for which to add SSH key")
+                         choices=['cisco_ios', 'arista_eos', 'juniper', 'dellos9'])
+    parser.add_argument("--user", default=getpass.getuser(),
+                        help="User for which to add SSH key")
     parser.add_argument("-P", "--port", default=22, help="SSH port (Default=22)", type=int)
-    parser.add_argument("-i", default="/root/.ssh/id_rsa.pub", help="Path to public SSH key", dest='ssh_key')
+    parser.add_argument("-i", default=os.path.expanduser("~/.ssh/id_rsa.pub"),
+                        help="Path to public SSH key", dest='ssh_key')
     parser.add_argument("-u", help="Device admin username", dest='device_admin')
-    parser.add_argument("-p", help="Device admin username", dest='device_pass')
+    parser.add_argument("-p", help="Device admin password", dest='device_pass')
     parser.add_argument("-r", "--remove", help="Remove SSH key", action="store_true")
     args = parser.parse_args()
 
     if not args.device_admin:
-        device_admin = raw_input('Please enter device admin username: ')
+        device_admin = raw_input('Username: ')
     else:
         device_admin = device_admin
 
     if not args.device_pass:
-        device_pass = raw_input('Please enter device admin password: ')
+        device_pass = getpass.getpass('Password: ')
     else:
         device_pass = device_pass
+
+    if args.remove:
+        UNSET = True
 
     net_device = {
         'device_type': args.vendor,
@@ -70,6 +103,20 @@ if __name__ == "__main__":
         'port': args.port,
     }
 
-
+    ssh_conn = ConnectHandler(**net_device)
     if args.vendor == 'cisco_ios':
-        cisco_ios(net_device, args.user, read_file(args.ssh_key), args.remove)
+        commands_set = cisco_ios(args.user, read_file(args.ssh_key))
+        output = ssh_conn.send_config_set(commands_set)
+        output += ssh_conn.send_command_expect('write memory')
+    elif args.vendor == 'juniper':
+        commands_set = junos(args.user, read_file(args.ssh_key))
+        output = ssh_conn.send_config_set(commands_set, exit_config_mode=False)
+        output += ssh_conn.commit()
+    elif args.vendor == 'arista_eos':
+        ssh_conn.enable()
+        commands_set =arista(args.user, read_file(args.ssh_key), device_pass)
+        output = ssh_conn.send_config_set(commands_set)
+        output += ssh_conn.send_command_expect('write memory')
+
+    # print output
+    print("All Done!")
