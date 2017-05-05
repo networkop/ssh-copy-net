@@ -56,6 +56,20 @@ def dell_os9(username, public_key):
 def comware():
     pass
 
+def sros(username, public_key):
+    public_key = public_key.split()[1]
+    commands_to_set = ['system security',
+                       'user "{}"'.format(username),
+                       'access console',
+                       'public-keys rsa rsa-key 1 create',
+                       'key-value "{}"'.format(public_key), 'exit all']
+    commands_to_unset = ['system security',
+                         'no user "{}"'.format(username), 'exit all']
+    if not UNSET:
+        return commands_to_set
+    else:
+        return commands_to_unset
+
 def save_config(ssh_conn, vendor):
     save = None
     if vendor == 'cisco':
@@ -70,7 +84,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("ip", help="Device hostname or IP address")
     parser.add_argument("vendor", help="Device vendor(same as in netmiko)",
-                         choices=['cisco_ios', 'arista_eos', 'juniper', 'dellos9'])
+                         choices=['cisco_ios', 'arista_eos', 'juniper', 'alcatel_sros'])
     parser.add_argument("--user", default=getpass.getuser(),
                         help="User for which to add SSH key")
     parser.add_argument("-P", "--port", default=22, help="SSH port (Default=22)", type=int)
@@ -117,6 +131,11 @@ if __name__ == "__main__":
         commands_set =arista(args.user, read_file(args.ssh_key), device_pass)
         output = ssh_conn.send_config_set(commands_set)
         output += ssh_conn.send_command_expect('write memory')
+    elif args.vendor == 'alcatel_sros':
+        commands_set =sros(args.user, read_file(args.ssh_key))
+        output = ssh_conn.send_config_set(commands_set, exit_config_mode=False)
+        output += ssh_conn.send_command('admin save', expect_string='#')
 
-    # print output
+
+    print output
     print("All Done!")
