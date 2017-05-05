@@ -3,7 +3,7 @@
 import os
 import getpass
 import argparse
-from netmiko import ConnectHandler
+from netmiko import ConnectHandler, SCPConn
 
 UNSET = False
 
@@ -51,7 +51,16 @@ def junos(username, public_key):
         return commands_to_unset
 
 def dell_os9(username, public_key):
-    pass
+    commands_to_set = ['username {} privilege 15'.format(username),
+                       'ip ssh rsa-authentication enable',
+                       'exit',
+                       'ip ssh rsa-authentication username {} \
+                       authorized-keys flash:/id_rsa.pub'.format(username)]
+    commands_to_unset = ['no username {}'.format(username)]
+    if not UNSET:
+        return commands_to_set
+    else:
+        return commands_to_unset
 
 def comware():
     pass
@@ -84,7 +93,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("ip", help="Device hostname or IP address")
     parser.add_argument("vendor", help="Device vendor(same as in netmiko)",
-                         choices=['cisco_ios', 'arista_eos', 'juniper', 'alcatel_sros'])
+                         choices=['cisco_ios', 'arista_eos', 'juniper',
+                                  'alcatel_sros', 'dell_force10'])
     parser.add_argument("--user", default=getpass.getuser(),
                         help="User for which to add SSH key")
     parser.add_argument("-P", "--port", default=22, help="SSH port (Default=22)", type=int)
@@ -135,7 +145,13 @@ if __name__ == "__main__":
         commands_set =sros(args.user, read_file(args.ssh_key))
         output = ssh_conn.send_config_set(commands_set, exit_config_mode=False)
         output += ssh_conn.send_command('admin save', expect_string='#')
-
+    elif args.vendor == 'dell_force10':
+        scp_conn = SCPConn(ssh_conn)
+        scp_conn.scp_transfer_file(args.ssh_key, 'id_rsa.pub')
+        scp_conn.close()
+        commands_set = dell_os9(args.user, read_file(args.ssh_key))
+        output = ssh_conn.send_config_set(commands_set)
+        output += ssh_conn.send_command_expect('write memory')
 
     print output
     print("All Done!")
