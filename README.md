@@ -1,5 +1,5 @@
 # ssh-copy-net
----
+
 [ssh-copy-id](https://linux.die.net/man/1/ssh-copy-id) equivalent for network devices
 
 ## Requires
@@ -22,7 +22,7 @@ Netmiko >= 1.4.0
 
 ## Usage
 
-Enter the device IP, vendor and admin credentials. Default behaviour is to install local user's public SSH key.
+Enter device IP, vendor and admin credentials. Default behaviour is to install local user's public SSH key.
 
 ```bash
 [null@null ~]$ ssh-copy-net 10.6.142.1 juniper
