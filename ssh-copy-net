@@ -50,20 +50,30 @@ def junos(username, public_key):
     else:
         return commands_to_unset
 
-def dell_os9(username, public_key):
+def dell_os9(username):
     commands_to_set = ['username {} privilege 15'.format(username),
                        'ip ssh rsa-authentication enable',
                        'exit',
-                       'ip ssh rsa-authentication username {} \
-                       authorized-keys flash:/id_rsa.pub'.format(username)]
+                       'ip ssh rsa-authentication username {0} \
+                       authorized-keys flash:/{0}.pub'.format(username)]
     commands_to_unset = ['no username {}'.format(username)]
     if not UNSET:
         return commands_to_set
     else:
         return commands_to_unset
 
-def comware():
-    pass
+def comware(username):
+    commands_to_set = ['public-key peer {0} import sshkey {0}.pub'.format(username),
+                       'ssh user {0} service-type all authentication-type publickey assign publickey {0}'.format(username),
+                       'local-user {}'.format(username),
+                       'service-type ssh']
+    commands_to_unset = ['undo ssh user {}'.format(username),
+                         'undo public-key peer {}'.format(username),
+                         'undo local-user {}'.format(username)]
+    if not UNSET:
+        return commands_to_set
+    else:
+        return commands_to_unset
 
 def sros(username, public_key):
     public_key = public_key.split()[1]
@@ -79,22 +89,27 @@ def sros(username, public_key):
     else:
         return commands_to_unset
 
-def save_config(ssh_conn, vendor):
-    save = None
-    if vendor == 'cisco':
-        def save():
-            ssh_conn.send_command_expect('write memory')
-    elif vendor == 'juniper':
-        def save():
-            ssh_conn.commit()
-    return save
+def mellanox(username, public_key):
+    commands_to_set = ['username {} capability admin'.format(username),
+                       'ssh client user {} authorized-key sshv2 "{}"'.format(username, public_key)]
+    commands_to_unset = ['no username {}'.format(username)]
+    if not UNSET:
+        return commands_to_set
+    else:
+        return commands_to_unset
+
+def scp_file(ssh_conn, file_path, target_file):
+    scp_conn = SCPConn(ssh_conn)
+    scp_conn.scp_transfer_file(args.ssh_key, target_file)
+    scp_conn.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("ip", help="Device hostname or IP address")
     parser.add_argument("vendor", help="Device vendor(same as in netmiko)",
                          choices=['cisco_ios', 'arista_eos', 'juniper',
-                                  'alcatel_sros', 'dell_force10'])
+                                  'alcatel_sros', 'dell_force10', 'hp_comware',
+                                  'mellanox_ssh'])
     parser.add_argument("--user", default=getpass.getuser(),
                         help="User for which to add SSH key")
     parser.add_argument("-P", "--port", default=22, help="SSH port (Default=22)", type=int)
@@ -138,20 +153,27 @@ if __name__ == "__main__":
         output += ssh_conn.commit()
     elif args.vendor == 'arista_eos':
         ssh_conn.enable()
-        commands_set =arista(args.user, read_file(args.ssh_key), device_pass)
+        commands_set = arista(args.user, read_file(args.ssh_key), device_pass)
         output = ssh_conn.send_config_set(commands_set)
         output += ssh_conn.send_command_expect('write memory')
     elif args.vendor == 'alcatel_sros':
-        commands_set =sros(args.user, read_file(args.ssh_key))
+        commands_set = sros(args.user, read_file(args.ssh_key))
         output = ssh_conn.send_config_set(commands_set, exit_config_mode=False)
         output += ssh_conn.send_command('admin save', expect_string='#')
     elif args.vendor == 'dell_force10':
-        scp_conn = SCPConn(ssh_conn)
-        scp_conn.scp_transfer_file(args.ssh_key, 'id_rsa.pub')
-        scp_conn.close()
-        commands_set = dell_os9(args.user, read_file(args.ssh_key))
+        scp_file(ssh_conn, args.ssh_key, '{}.pub'.format(args.user))
+        commands_set = dell_os9(args.user)
         output = ssh_conn.send_config_set(commands_set)
         output += ssh_conn.send_command_expect('write memory')
-
+    elif args.vendor == 'hp_comware':
+        scp_file(ssh_conn, args.ssh_key, '{}.pub'.format(args.user))
+        commands_set = comware(args.user)
+        output = ssh_conn.send_config_set(commands_set)
+        output += ssh_conn.send_config_set(['save', 'Y', '', 'Y'])
+    elif args.vendor == 'mellanox_ssh':
+        ssh_conn.enable()
+        commands_set = mellanox(args.user, read_file(args.ssh_key))
+        output = ssh_conn.send_config_set(commands_set)
+        output += ssh_conn.send_command_expect('write memory')
     print output
     print("All Done!")
