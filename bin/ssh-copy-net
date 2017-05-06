@@ -175,5 +175,5 @@ if __name__ == "__main__":
         commands_set = mellanox(args.user, read_file(args.ssh_key))
         output = ssh_conn.send_config_set(commands_set)
         output += ssh_conn.send_command_expect('write memory')
-    print output
+    # print output
     print("All Done!")
