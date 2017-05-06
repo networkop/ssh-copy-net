@@ -118,6 +118,7 @@ if __name__ == "__main__":
     parser.add_argument("-u", help="Device admin username", dest='device_admin')
     parser.add_argument("-p", help="Device admin password", dest='device_pass')
     parser.add_argument("-r", "--remove", help="Remove SSH key", action="store_true")
+    parser.add_argument("-v", "--verbose", help="Increase output verbosity", action="store_true")
     args = parser.parse_args()
 
     if not args.device_admin:
@@ -175,5 +176,7 @@ if __name__ == "__main__":
         commands_set = mellanox(args.user, read_file(args.ssh_key))
         output = ssh_conn.send_config_set(commands_set)
         output += ssh_conn.send_command_expect('write memory')
-    # print output
+
+    if args.verbose:
+        print output
     print("All Done!")

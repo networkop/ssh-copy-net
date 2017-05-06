@@ -1,6 +1,6 @@
 # ssh-copy-net
 
-[ssh-copy-id](https://linux.die.net/man/1/ssh-copy-id) equivalent for network devices
+[ssh-copy-id](https://linux.die.net/man/1/ssh-copy-id) equivalent for network devices, implemented using [Netmiko](https://github.com/ktbyers/netmiko).
 
 ## Requires
 
