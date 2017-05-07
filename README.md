@@ -11,7 +11,7 @@ Netmiko >= 1.4.0
 * Cisco IOS-XE
 * JUNOS (SRX, MX)
 * Arista EOS
-* Alcatel SROS
+* Nokia (Alcatel-Lucent) SROS
 * Dell  Force10 OS9
 * HP Comware 7
 * Mellanox MLNX-OS
