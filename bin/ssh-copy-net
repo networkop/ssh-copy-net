@@ -55,7 +55,7 @@ def dell_os9(username):
                        'ip ssh rsa-authentication enable',
                        'exit',
                        'ip ssh rsa-authentication username {0} \
-                       authorized-keys flash:/{0}.pub'.format(username)]
+                       authorized-keys flash:/{0}.pub'.format(username),'yes']
     commands_to_unset = ['no username {}'.format(username)]
     if not UNSET:
         return commands_to_set
